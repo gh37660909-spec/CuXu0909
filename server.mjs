@@ -48,6 +48,9 @@ const DEFAULT_WORKSPACE = process.env.NALO_WORKSPACE
   ? path.resolve(process.env.NALO_WORKSPACE)
   : path.join(ROOT, 'workspace');
 const PORT = Number(process.env.PORT || 5330);
+const IS_MAC = process.platform === 'darwin';
+const SHELL_BIN = IS_MAC ? '/bin/zsh' : 'powershell.exe';
+function shellArgs(command) { return IS_MAC ? ['-lc', command] : ['-NoProfile', '-NonInteractive', '-Command', command]; }
 const HOST = process.env.HOST || '127.0.0.1';
 
 const MAX_TOOL_ITERATIONS = 500;
@@ -884,7 +887,7 @@ async function startService({ name, command, cwd }) {
   const logFile = path.join(DATA, 'logs', `${id}.log`);
   await fs.mkdir(path.dirname(logFile), { recursive: true });
   const stream = (await import('node:fs')).createWriteStream(logFile, { flags: 'a' });
-  const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], {
+  const child = spawn(SHELL_BIN, shellArgs(command), {
     cwd: cwd || config.workspace,
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe']
@@ -2819,9 +2822,13 @@ async function runTool(name, args, workspace = config.workspace) {
       if (browser !== 'default' && allowed[browser] === false) throw new Error(`你已在插件里关闭 ${browser} 浏览器`);
       const map = { chrome: 'chrome', edge: 'msedge', default: '' };
       const exe = map[browser] ?? '';
-      spawn('cmd.exe', ['/c', 'start', '', ...(exe ? [exe] : []), url], {
-        detached: true, stdio: 'ignore', windowsHide: true
-      }).unref();
+      if (IS_MAC) {
+        spawn('open', [url], { detached: true, stdio: 'ignore' }).unref();
+      } else {
+        spawn('cmd.exe', ['/c', 'start', '', ...(exe ? [exe] : []), url], {
+          detached: true, stdio: 'ignore', windowsHide: true
+        }).unref();
+      }
       return `已在${browser || '默认'}浏览器打开 ${url}`;
     }
     case 'look_screen': {
@@ -2838,7 +2845,7 @@ async function runTool(name, args, workspace = config.workspace) {
       const command = String(args?.command || '').trim();
       if (!command) throw new Error('命令不能为空');
       const timeout = Math.min(180000, Number(args?.timeout) || 120000);
-      const output = await runProcess('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { timeout, cwd: workspace });
+      const output = await runProcess(SHELL_BIN, shellArgs(command), { timeout, cwd: workspace });
       return output ? output.slice(0, 12000) : '（命令执行完成，没有输出）';
     }
     case 'search_files': {
@@ -2989,7 +2996,7 @@ async function runTool(name, args, workspace = config.workspace) {
       }
       if (!command && entries.some((name) => name.endsWith('.test.js') || name.endsWith('.spec.js'))) command = 'node --test';
       if (!command) return '没有检测到测试配置（package.json 的 test 脚本 / pytest / node --test）';
-      const output = await runProcess('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { cwd: root, timeout: 180000 });
+      const output = await runProcess(SHELL_BIN, shellArgs(command), { cwd: root, timeout: 180000 });
       return `执行：${command}\\n\\n${output || '（没有输出）'}`;
     }
     case 'analyze_image': {
