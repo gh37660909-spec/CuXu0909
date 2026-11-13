@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
 rm -rf mac/app
@@ -8,7 +8,10 @@ cp -R web mac/app/web
 cp -R tools mac/app/tools
 cat > mac/app/package.json <<'EOF'
 {
-  "name": "nalo-code-runtime",\n  "version": "2.2.0",\n  "description": "Nalo Code runtime",\n  "author": "Nalo",
+  "name": "nalo-code-runtime",
+  "version": "2.2.0",
+  "description": "Nalo Code runtime",
+  "author": "Nalo",
   "private": true,
   "type": "module"
 }
