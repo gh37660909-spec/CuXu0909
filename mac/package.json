@@ -1,51 +1,51 @@
-{
-  "name": "nalo-code-mac",
-  "version": "2.2.0",
-  "private": true,
-  "description": "Nalo Code macOS shell",
-  "main": "main.cjs",
-  "scripts": {
-    "start": "electron .",
-    "dist": "electron-builder --mac --publish never"
-  },
-  "devDependencies": {
-    "electron": "^33.2.0",
-    "electron-builder": "^25.1.8"
-  },
-  "build": {
-    "appId": "work.nalo.code",
-    "productName": "Nalo Code",
-    "asar": true,
-    "files": [
-      "main.cjs",
-      "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": "app",
-        "to": "app"
-      }
-    ],
-    "directories": {
-      "output": "dist"
-    },
-    "mac": {
-      "category": "public.app-category.productivity",
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
-        }
-      ],
-      "hardenedRuntime": false,
-      "gatekeeperAssess": false,
-      "identity": null
-    },
-    "dmg": {
-      "title": "Nalo Code"
-    }
-  }
+﻿{
+    "name":  "nalo-code-mac",
+    "version":  "2.2.0",
+    "private":  true,
+    "description":  "Nalo Code macOS shell",
+    "main":  "main.cjs",
+    "scripts":  {
+                    "start":  "electron .",
+                    "dist":  "electron-builder --mac --publish never"
+                },
+    "devDependencies":  {
+                            "electron":  "^33.2.0",
+                            "electron-builder":  "^25.1.8"
+                        },
+    "build":  {
+                  "appId":  "work.nalo.code",
+                  "productName":  "Nalo Code",
+                  "asar":  true,
+                  "files":  [
+                                "main.cjs",
+                                "package.json"
+                            ],
+                  "extraResources":  [
+                                         {
+                                             "from":  "app",
+                                             "to":  "app"
+                                         }
+                                     ],
+                  "directories":  {
+                                      "output":  "dist"
+                                  },
+                  "mac":  {
+                              "category":  "public.app-category.productivity",
+                              "target":  [
+                                             {
+                                                 "target":  "zip",
+                                                 "arch":  [
+                                                              "arm64",
+                                                              "x64"
+                                                          ]
+                                             }
+                                         ],
+                              "hardenedRuntime":  false,
+                              "gatekeeperAssess":  false,
+                              "identity":  null
+                          },
+                  "dmg":  {
+                              "title":  "Nalo Code"
+                          }
+              }
 }
