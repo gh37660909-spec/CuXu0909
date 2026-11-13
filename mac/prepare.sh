@@ -6,15 +6,5 @@ mkdir -p mac/app
 cp server.mjs mac/app/server.mjs
 cp -R web mac/app/web
 cp -R tools mac/app/tools
-cat > mac/app/package.json <<'EOF'
-{
-  "name": "nalo-code-runtime",
-  "version": "2.2.0",
-  "description": "Nalo Code runtime",
-  "author": "Nalo",
-  "private": true,
-  "type": "module"
-}
-EOF
 rm -rf mac/app/web/download mac/app/tools/__pycache__ 2>/dev/null || true
 echo "prepared mac/app"
