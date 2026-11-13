@@ -1,0 +1,41 @@
+name: Build macOS test package
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-macos:
+    runs-on: macos-14
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Prepare runtime
+        run: bash mac/prepare.sh
+
+      - name: Install build tools
+        working-directory: mac
+        run: npm install
+
+      - name: Build unsigned DMG
+        working-directory: mac
+        run: npm run dist
+
+      - name: List artifacts
+        run: find mac/dist -maxdepth 2 -type f
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NaloCode-mac-unsigned
+          path: |
+            mac/dist/*.dmg
+            mac/dist/*.zip
+          if-no-files-found: error

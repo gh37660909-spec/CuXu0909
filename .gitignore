@@ -1,0 +1,12 @@
+data/
+workspace/
+dist/
+mac/app/
+mac/node_modules/
+mac/dist/
+mac/package-lock.json
+*.zip
+*.7z
+_shots/
+test/tmp/
+.env
