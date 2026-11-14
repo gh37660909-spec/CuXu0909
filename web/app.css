@@ -3320,3 +3320,33 @@ body.maintenance-lock #app { pointer-events:none; user-select:none; }
 
 #clearAutomationSessions { padding:4px 7px; border-radius:6px; font-size:10.5px; color:var(--muted); }
 #clearAutomationSessions:hover { background:#80808017; color:var(--ink); }
+
+.pet-session-list { display:flex; flex-direction:column; gap:6px; max-height:300px; overflow:auto; }
+.pet-session-row { display:flex; align-items:center; gap:8px; border:1px solid var(--line); border-radius:9px; padding:8px 9px; background:var(--paper); }
+.pet-session-row .meta { min-width:0; flex:1; }
+.pet-session-row strong { display:block; font-size:11.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pet-session-row small { display:block; color:var(--muted); font-size:10px; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pet-session-row button { flex:0 0 auto; }
+.pet-record-body { max-height:55vh; overflow:auto; display:flex; flex-direction:column; gap:8px; padding:4px 2px; }
+.pet-record-msg { padding:7px 9px; border-radius:8px; background:var(--side); color:var(--ink); font-size:11.5px; line-height:1.6; white-space:pre-wrap; }
+.pet-record-msg.user { background:#e5f5ed; }
+
+.balance-toolbar { display:flex; align-items:center; gap:10px; margin:12px 0 10px; }
+.balance-list { display:flex; flex-direction:column; gap:8px; }
+.balance-card { border:1px solid var(--line); border-radius:11px; padding:10px 12px; background:var(--paper); }
+.balance-card-top { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.balance-model { font-size:11.5px; font-weight:650; color:var(--ink); }
+.balance-value { font-size:12px; color:var(--ink); margin-top:6px; }
+.balance-value strong { font-weight:700; }
+.balance-value .ok { color:#15966e; }
+.balance-time { color:var(--muted); font-size:10px; margin-top:4px; }
+.balance-note { color:var(--muted); font-size:10px; margin-top:3px; }
+.balance-badge { font-size:9px; border-radius:999px; padding:2px 7px; background:var(--side); color:var(--muted); }
+.balance-empty { color:var(--muted); font-size:11px; padding:12px; border:1px dashed var(--line); border-radius:9px; }
+
+.knowledge-form { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+.knowledge-form label { display:flex; flex-direction:column; gap:4px; font-size:11px; color:var(--muted); }
+.knowledge-form input, .knowledge-form textarea { width:100%; border:1px solid var(--line); border-radius:8px; padding:7px 9px; background:var(--paper); color:var(--ink); font:inherit; font-size:11.5px; resize:vertical; outline:none; }
+.knowledge-form input:focus, .knowledge-form textarea:focus { border-color:var(--accent); }
+.knowledge-search { flex:1; border:1px solid var(--line); border-radius:8px; padding:7px 9px; background:var(--paper); color:var(--ink); font:inherit; font-size:11px; outline:none; }
+.knowledge-card-text { color:var(--muted); font-size:10.5px; line-height:1.6; margin-top:5px; white-space:pre-wrap; }

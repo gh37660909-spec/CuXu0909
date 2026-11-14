@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN" data-theme="light">
 <head>
 <meta charset="utf-8">
@@ -324,6 +324,14 @@
         <label class="switch"><input type="checkbox" id="browserEdge"><span class="switch-track"></span></label>
       </div>
       <div class="plugin-row">
+        <span class="agent-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l14 8-6 2-2 6z"/><path d="M13 13l4 7"/></svg></span>
+        <div class="plugin-text">
+          <strong>Agent Control</strong>
+          <p>允许 Agent 操作桌面窗口、鼠标和键盘；每次点击、输入仍需你确认。</p>
+        </div>
+        <label class="switch"><input type="checkbox" id="agentControlToggle"><span class="switch-track"></span></label>
+      </div>
+      <div class="plugin-row">
         <span class="agent-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4a3 3 0 0 0-3 3 3 3 0 0 0-1 5.8A3.5 3.5 0 0 0 8.5 18H11V4H9z"/><path d="M15 4a3 3 0 0 1 3 3 3 3 0 0 1 1 5.8A3.5 3.5 0 0 1 15.5 18H13V4h2z"/></svg></span>
         <div class="plugin-text">
           <strong>Agent 思考限制</strong>
@@ -466,8 +474,11 @@
         <button type="button" class="active" data-tab="appearance" data-i18n="settings.appearance"></button>
         <button type="button" data-tab="language" data-i18n="settings.language"></button>
         <button type="button" data-tab="model" data-i18n="settings.model"></button>
+        <button type="button" data-tab="balance">余额查询</button>
+        <button type="button" data-tab="knowledge">知识库</button>
         <button type="button" data-tab="security" data-i18n="settings.security"></button>
-        <button type="button" data-tab="account" data-i18n="profile.title"></button>
+        <button type="button" data-tab="virtual">虚拟 Nalo Code</button>
+                <button type="button" data-tab="account" data-i18n="profile.title"></button>
         <button type="button" data-tab="mcp">MCP</button>
         <button type="button" data-tab="subscription">订阅</button>
       </nav>
@@ -479,6 +490,39 @@
           <div class="segmented" id="themeSegment">
             <button type="button" data-theme-choice="light" data-i18n="settings.light"></button>
             <button type="button" data-theme-choice="dark" data-i18n="settings.dark"></button>
+          </div>
+          <div class="local-model" style="margin-top:16px">
+            <div class="local-model-head">
+              <div><strong>自动更新</strong><small>从 nalo.work 检查新版本，下载并自动安装</small></div>
+              <label class="switch small"><input type="checkbox" id="autoUpdateToggle" checked><span class="switch-track"></span></label>
+            </div>
+            <p class="local-model-note">关闭后只提示新版本，不会自动下载安装。更新包会校验 SHA256。</p>
+          </div>
+        </section>
+
+        <section class="settings-panel" data-panel="virtual">
+          <h3>虚拟 Nalo Code</h3>
+          <p class="settings-desc">让 Nalo 以桌面宠物的形式常驻。关闭主窗口后仍在托盘运行，点击宠物即可对话和操作。</p>
+          <div class="local-model" style="margin-top:12px">
+            <div class="local-model-head">
+              <div><strong>桌面随时 Agent</strong><small>常驻桌面 · 点击对话 · 授权后操作</small></div>
+              <label class="switch small"><input type="checkbox" id="desktopPetToggle"><span class="switch-track"></span></label>
+            </div>
+            <p class="local-model-note">打开后出现桌面宠物。关闭主窗口只会隐藏到托盘，不会退出 Nalo。</p>
+          </div>
+          <p class="settings-desc" style="margin-top:12px">宠物会使用当前账号的模型和权限设置。涉及文件、命令、浏览器等操作时，仍需按当前权限确认。</p>
+          <div class="local-model" style="margin-top:12px">
+            <div class="local-model-head">
+              <div><strong>随时Agent 聊天记录</strong><small>只保存在这里，不进入历史对话</small></div>
+              <button type="button" class="ghost-btn" id="petSessionOpen">查看记录</button>
+            </div>
+            <div id="petSessionBox" hidden style="margin-top:8px">
+              <div style="display:flex;gap:8px;margin:6px 0 8px">
+                <button type="button" class="ghost-btn" id="petSessionRefresh">刷新记录</button>
+                <button type="button" class="ghost-btn" id="petSessionClear">清空记录</button>
+              </div>
+              <div id="petSessionList" class="pet-session-list"><p class="muted">暂无随时Agent记录</p></div>
+            </div>
           </div>
         </section>
 
@@ -574,6 +618,34 @@
           </div>
         </section>
 
+        <section class="settings-panel" data-panel="balance">
+          <h3>余额查询</h3>
+          <p class="settings-desc">只在本机向模型厂商查询余额。支持 DeepSeek、Kimi、OpenRouter；其他平台未开放普通 API Key 余额查询时显示“无法估算”。</p>
+          <div class="balance-toolbar">
+            <button type="button" class="ghost-btn" id="balanceRefresh">刷新余额</button>
+            <span id="balanceStatus" class="muted"></span>
+          </div>
+          <div id="balanceList" class="balance-list"></div>
+          <p class="settings-desc">余额来自厂商接口，只读查询，不会上传 API Key。估算结果仅供参考，以厂商后台为准。</p>
+        </section>
+
+        <section class="settings-panel" data-panel="knowledge">
+          <h3>知识库</h3>
+          <p class="settings-desc">把项目资料、偏好和常用说明写入本地知识库，Agent 可以检索后继续使用。内容只保存在本机。</p>
+          <div class="knowledge-form">
+            <label><span>标题</span><input id="knowledgeTitle" placeholder="例如：Nalo Code 发布流程" maxlength="120"></label>
+            <label><span>内容</span><textarea id="knowledgeText" rows="4" placeholder="写入需要长期保留的资料、约定或步骤…"></textarea></label>
+            <label><span>标签（可选）</span><input id="knowledgeTags" placeholder="项目, 发布, 约定"></label>
+            <div class="dialog-actions"><span></span><button type="button" class="primary-btn" id="knowledgeAdd">写入知识库</button></div>
+          </div>
+          <div class="balance-toolbar">
+            <input id="knowledgeSearch" class="knowledge-search" placeholder="搜索知识库…" />
+            <button type="button" class="ghost-btn" id="knowledgeSearchBtn">搜索</button>
+            <span id="knowledgeStatus" class="muted"></span>
+          </div>
+          <div id="knowledgeList" class="balance-list"></div>
+        </section>
+
         <section class="settings-panel" data-panel="security">
           <h3 data-i18n="settings.security"></h3>
           <p class="settings-desc" data-i18n="security.changed"></p>
@@ -635,7 +707,7 @@
               <div class="plan-head"><strong>免费版</strong><span>¥0</span></div>
               <ul>
                 <li>单模型 Agent 任务</li><li>不支持 MCP</li><li>无自动化</li>
-                <li>设备上线 1 台</li><li>支持 API 快速填充</li>
+                <li>设备上线 1 台</li>
               </ul>
               <button type="button" class="ghost-btn" disabled>当前可用</button>
             </article>
@@ -1048,6 +1120,13 @@
       <button type="button" id="confirmCancel" class="ghost-btn">取消</button>
       <button type="button" id="confirmOk" class="primary-btn">确认</button>
     </div>
+  </div>
+</dialog>
+<dialog id="petRecordDialog" class="modal wide">
+  <div class="modal-body">
+    <button type="button" class="modal-close" id="petRecordClose">&times;</button>
+    <div class="dialog-heading"><div><div class="eyebrow">随时AGENT</div><h2 id="petRecordTitle">对话记录</h2></div></div>
+    <div id="petRecordBody" class="pet-record-body"></div>
   </div>
 </dialog>
 </body>

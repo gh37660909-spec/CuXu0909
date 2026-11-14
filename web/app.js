@@ -1768,6 +1768,159 @@ async function saveCurrentProvider() {
   toast(t('providers.saved'));
 }
 
+async function loadPetSessions() {
+  const list = $('petSessionList');
+  if (!list) return;
+  list.textContent = '';
+  try {
+    const { sessions } = await api('/api/pet-sessions');
+    if (!sessions?.length) {
+      const empty = document.createElement('p');
+      empty.className = 'muted';
+      empty.textContent = '暂无随时Agent记录';
+      list.appendChild(empty);
+      return;
+    }
+    for (const session of sessions) {
+      const row = document.createElement('div');
+      row.className = 'pet-session-row';
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      const title = document.createElement('strong');
+      title.textContent = session.title || '随时Agent';
+      const small = document.createElement('small');
+      small.textContent = `${new Date(session.updatedAt || Date.now()).toLocaleString(getLanguage())} · ${session.messageCount || 0} 条消息${session.preview ? ` · ${session.preview}` : ''}`;
+      meta.append(title, small);
+      const view = document.createElement('button');
+      view.type = 'button'; view.className = 'mini-btn'; view.textContent = '查看';
+      view.onclick = () => openPetRecord(session.id);
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'mini-btn'; del.textContent = '删除';
+      del.onclick = async () => {
+        await api(`/api/pet-sessions?id=${encodeURIComponent(session.id)}`, { method: 'DELETE' });
+        await loadPetSessions();
+        toast('随时Agent记录已删除');
+      };
+      row.append(meta, view, del);
+      list.appendChild(row);
+    }
+  } catch (error) {
+    const empty = document.createElement('p');
+    empty.className = 'muted';
+    empty.textContent = error.message;
+    list.appendChild(empty);
+  }
+}
+
+async function openPetRecord(id) {
+  try {
+    const { session } = await api(`/api/session?id=${encodeURIComponent(id)}`);
+    $('petRecordTitle').textContent = session.title || '随时Agent';
+    const body = $('petRecordBody');
+    body.textContent = '';
+    for (const message of session.messages || []) {
+      if (message.role !== 'user' && message.role !== 'assistant') continue;
+      if (!String(message.content || '').trim()) continue;
+      const item = document.createElement('div');
+      item.className = `pet-record-msg ${message.role === 'user' ? 'user' : ''}`;
+      item.textContent = `${message.role === 'user' ? '你' : '随时Agent'}：${message.content}`;
+      body.appendChild(item);
+    }
+    if (!body.children.length) {
+      const empty = document.createElement('p'); empty.className = 'muted'; empty.textContent = '这条记录没有文字内容'; body.appendChild(empty);
+    }
+    $('petRecordDialog').showModal();
+  } catch (error) { toast(error.message); }
+}
+
+async function loadBalances(force = false) {
+  const list = $('balanceList');
+  if (!list) return;
+  const status = $('balanceStatus');
+  const button = $('balanceRefresh');
+  if (button) button.disabled = true;
+  if (status) status.textContent = '查询中…';
+  let entries = [];
+  try {
+    const data = await api('/api/balances' + (force ? '?refresh=1' : ''));
+    entries = Array.isArray(data.balances) ? data.balances : [];
+    if (status) status.textContent = force ? '已刷新' : '已更新';
+  } catch (error) {
+    if (status) status.textContent = error.message;
+  } finally {
+    if (button) button.disabled = false;
+  }
+  list.textContent = '';
+  for (let index = 0; index < 5; index += 1) {
+    const entry = entries[index];
+    const card = document.createElement('div');
+    card.className = 'balance-card';
+    const top = document.createElement('div'); top.className = 'balance-card-top';
+    const model = document.createElement('div'); model.className = 'balance-model';
+    model.textContent = `模型 ${index + 1} / ${entry?.model || '未配置'}`;
+    const badge = document.createElement('span'); badge.className = 'balance-badge';
+    badge.textContent = entry?.supported ? '已连接' : '—';
+    top.append(model, badge);
+    const value = document.createElement('div'); value.className = 'balance-value';
+    if (entry?.supported && Number.isFinite(Number(entry.balance))) {
+      const currency = entry.currency === 'USD' ? '$' : entry.currency === 'CNY' ? '¥' : '';
+      value.textContent = '估算 API 剩余额度：';
+      const strong = document.createElement('strong'); strong.className = 'ok';
+      strong.textContent = `${currency} ${Number(entry.balance).toFixed(2)}`;
+      value.appendChild(strong);
+    } else {
+      value.textContent = '估算 API 剩余额度：无法估算';
+    }
+    const time = document.createElement('div'); time.className = 'balance-time';
+    time.textContent = `更新时间：${entry?.updatedAt ? new Date(entry.updatedAt).toLocaleString(getLanguage()) : '—'}`;
+    card.append(top, value, time);
+    if (entry && !entry.supported && entry.note) {
+      const note = document.createElement('div'); note.className = 'balance-note'; note.textContent = entry.note; card.appendChild(note);
+    }
+    list.appendChild(card);
+  }
+}
+
+async function loadKnowledge(query = '') {
+  const list = $('knowledgeList');
+  if (!list) return;
+  const status = $('knowledgeStatus');
+  try {
+    const { items } = await api('/api/knowledge');
+    const needle = String(query || '').trim().toLowerCase();
+    const filtered = needle ? (items || []).filter((item) => `${item.title} ${item.tags || ''} ${item.text}`.toLowerCase().includes(needle)) : (items || []);
+    if (status) status.textContent = `${filtered.length} 条`;
+    list.textContent = '';
+    if (!filtered.length) {
+      const empty = document.createElement('div'); empty.className = 'balance-empty'; empty.textContent = needle ? '没有匹配的资料' : '知识库还是空的'; list.appendChild(empty); return;
+    }
+    for (const item of filtered) {
+      const card = document.createElement('div'); card.className = 'balance-card';
+      const top = document.createElement('div'); top.className = 'balance-card-top';
+      const title = document.createElement('div'); title.className = 'balance-model'; title.textContent = item.title;
+      const del = document.createElement('button'); del.type = 'button'; del.className = 'mini-btn'; del.textContent = '删除';
+      del.onclick = async () => { await api(`/api/knowledge?id=${encodeURIComponent(item.id)}`, { method: 'DELETE' }); await loadKnowledge($('knowledgeSearch')?.value || ''); toast('已删除'); };
+      top.append(title, del);
+      const time = document.createElement('div'); time.className = 'balance-time'; time.textContent = new Date(item.createdAt || Date.now()).toLocaleString(getLanguage());
+      const text = document.createElement('div'); text.className = 'knowledge-card-text'; text.textContent = String(item.text || '').slice(0, 500);
+      card.append(top, time, text);
+      list.appendChild(card);
+    }
+  } catch (error) {
+    list.textContent = error.message;
+  }
+}
+
+async function addKnowledge() {
+  const title = $('knowledgeTitle').value.trim();
+  const text = $('knowledgeText').value.trim();
+  if (!title || !text) { toast('请填写标题和内容'); return; }
+  await api('/api/knowledge', { method: 'POST', body: JSON.stringify({ title, text, tags: $('knowledgeTags').value.trim() }) });
+  $('knowledgeTitle').value = ''; $('knowledgeText').value = ''; $('knowledgeTags').value = '';
+  await loadKnowledge();
+  toast('已写入知识库');
+}
+
 function openSettings(tab = 'appearance') {
   if (!state.app?.authenticated) { openLogin(); return; }
   $('setBaseUrl').value = state.config?.baseUrl || '';
@@ -1814,6 +1967,9 @@ function selectSettingsTab(tab) {
   document.querySelectorAll('.settings-panel').forEach((panel) => {
     panel.classList.toggle('active', panel.dataset.panel === tab);
   });
+  if (tab === 'virtual' && $('petSessionBox') && !$('petSessionBox').hidden) loadPetSessions();
+  if (tab === 'balance') loadBalances();
+  if (tab === 'knowledge') loadKnowledge();
 }
 
 async function saveSettings(event) {
@@ -1905,6 +2061,10 @@ function compareVersion(a, b) {
   return 0;
 }
 
+function autoUpdateEnabled() {
+  try { return localStorage.getItem('nalo.autoUpdate') !== 'off'; } catch { return true; }
+}
+
 async function loadUpdates() {
   try {
     const data = await api('/api/updates');
@@ -1913,6 +2073,12 @@ async function loadUpdates() {
     const dismissed = localStorage.getItem('nalo.updateDismissed') === data.latest;
     $('railUpdate').classList.toggle('has-update', newer && !dismissed);
     renderUpdateNotes();
+    if (newer && data.download && !dismissed && autoUpdateEnabled() && !state.autoUpdateStarted && window.chrome?.webview) {
+      state.autoUpdateStarted = true;
+      setTimeout(() => {
+        try { if (!document.querySelector('dialog[open]')) startInAppUpdate(); } catch { }
+      }, 5000);
+    }
   } catch { /* ignore */ }
 }
 
@@ -2732,7 +2898,7 @@ async function openAdminPage() {
       const cloud = await fetch('https://api.nalo.work/admin/users?key=nalo-admin-2026').then((r) => r.json());
       if (Array.isArray(cloud.users) && cloud.users.length) {
         const localMap = new Map((data.users || []).map((u) => [u.username, u]));
-        users = cloud.users.map((u) => ({ ...u, bannedUntil: localMap.get(u.username)?.bannedUntil || 0, banPermanent: Boolean(localMap.get(u.username)?.banPermanent) }));
+        users = cloud.users.map((u) => { const local = localMap.get(u.username); return { ...u, createdAt: local?.createdAt || u.createdAt, bannedUntil: local?.bannedUntil || 0, banPermanent: Boolean(local?.banPermanent) }; });
       }
     } catch { /* local fallback */ }
     $('adminStats').innerHTML = `<div class="admin-stat"><strong>${users.length}</strong><small>注册用户</small></div><div class="admin-stat"><strong>${users.filter((u) => u.role === 'admin').length}</strong><small>管理员</small></div><div class="admin-stat"><strong>${users.filter((u) => (u.plan || 'free') !== 'free').length}</strong><small>付费/升级用户</small></div>`;
@@ -3172,10 +3338,17 @@ function renderThinking() {
   });
 }
 
+function postPetState(enabled) {
+  try { window.chrome?.webview?.postMessage({ type: 'pet', enabled: Boolean(enabled) }); } catch { }
+}
+
 function applyConfig(config) {
   state.config = config;
   renderThinking();
   renderModelChip();
+  if ($('desktopPetToggle')) $('desktopPetToggle').checked = Boolean(config.desktopPetEnabled);
+  if ($('agentControlToggle')) $('agentControlToggle').checked = Boolean(config.agentControlEnabled);
+  postPetState(config.desktopPetEnabled);
 }
 
 /* ------------------------------------------------------------- bootstrap */
@@ -3254,6 +3427,35 @@ function bind() {
   });
   $('saveProviderBtn').addEventListener('click', () => saveCurrentProvider().catch((error) => toast(error.message)));
   $('fetchModelsBtn').addEventListener('click', fetchModels);
+  $('petSessionOpen').addEventListener('click', async () => {
+    $('petSessionBox').hidden = false;
+    $('petSessionOpen').textContent = '收起记录';
+    await loadPetSessions();
+  });
+  $('knowledgeAdd').addEventListener('click', () => addKnowledge().catch((error) => toast(error.message)));
+  $('knowledgeSearchBtn').addEventListener('click', () => loadKnowledge($('knowledgeSearch').value));
+  $('knowledgeSearch').addEventListener('keydown', (event) => { if (event.key === 'Enter') loadKnowledge($('knowledgeSearch').value); });
+  $('balanceRefresh').addEventListener('click', () => loadBalances(true));
+  $('petSessionRefresh').addEventListener('click', () => loadPetSessions());
+  $('petSessionClear').addEventListener('click', async () => {
+    if (!(await askConfirm('清空全部随时Agent聊天记录？普通历史和自动化历史不受影响。', '清空记录'))) return;
+    await api('/api/pet-sessions?all=1', { method: 'DELETE' });
+    await loadPetSessions();
+    toast('随时Agent记录已清空');
+  });
+  $('petRecordClose').addEventListener('click', () => $('petRecordDialog').close());
+  $('desktopPetToggle').addEventListener('change', async () => {
+    const enabled = $('desktopPetToggle').checked;
+    try {
+      await api('/api/config', { method: 'POST', body: JSON.stringify({ desktopPetEnabled: enabled }) });
+      state.config.desktopPetEnabled = enabled;
+      postPetState(enabled);
+      toast(enabled ? '桌面随时 Agent 已开启' : '桌面随时 Agent 已关闭');
+    } catch (error) {
+      $('desktopPetToggle').checked = !enabled;
+      toast(error.message);
+    }
+  });
   $('approvalAllow').addEventListener('click', async () => {
     if (state.pendingApproval) await answerQuestion(state.pendingApproval.id, '允许');
     state.pendingApproval = null;
@@ -3301,6 +3503,7 @@ function bind() {
   $('browserEdge').addEventListener('change', saveBrowserToggle);
   $('settingsLogout').addEventListener('click', async () => { $('settings').close(); await logout(); });
   $('railProfile').addEventListener('click', () => openProfile());
+  $('openProfileFromSettings').addEventListener('click', () => { const dialog = $('settings'); if (dialog && dialog.open) dialog.close(); openProfile(); });
   $('railPlugins').addEventListener('click', () => {
     if ($('pluginsPage').hidden) openPluginsPage(); else closePluginsPage();
   });
@@ -3309,6 +3512,17 @@ function bind() {
   $('subToolsMaster').addEventListener('change', () => {
     const group = (state.toolGroups || []).find((item) => item.id === state.subToolsGroup);
     if (group) setToolEnabled(group.tools.map((tool) => tool.name), $('subToolsMaster').checked);
+  });
+  $('agentControlToggle').addEventListener('change', async () => {
+    const enabled = $('agentControlToggle').checked;
+    try {
+      await api('/api/config', { method: 'POST', body: JSON.stringify({ agentControlEnabled: enabled }) });
+      toast(enabled ? 'Agent Control 已开启' : 'Agent Control 已关闭');
+      await loadToolCatalog();
+    } catch (error) {
+      $('agentControlToggle').checked = !enabled;
+      toast(error.message);
+    }
   });
   $('searchToggle').addEventListener('change', async () => {
     const enabled = $('searchToggle').checked;
@@ -3407,6 +3621,7 @@ function bind() {
   });
   $('winMin').addEventListener('click', () => postNative({ type: 'window', action: 'minimize' }));
   $('winMax').addEventListener('click', () => postNative({ type: 'window', action: 'maximize' }));
+  $('winMax').addEventListener('mouseenter', () => postNative({ type: 'window', action: 'snap' }));
   try {
     window.chrome?.webview?.addEventListener('message', (event) => {
       const data = event.data || {};
@@ -3468,6 +3683,11 @@ function bind() {
   document.querySelectorAll('[data-theme-choice]').forEach((button) => {
     button.addEventListener('click', () => applyTheme(button.dataset.themeChoice));
   });
+  const autoUpdateToggle = $('autoUpdateToggle');
+  if (autoUpdateToggle) {
+    try { autoUpdateToggle.checked = localStorage.getItem('nalo.autoUpdate') !== 'off'; } catch { autoUpdateToggle.checked = true; }
+    autoUpdateToggle.addEventListener('change', () => { try { localStorage.setItem('nalo.autoUpdate', autoUpdateToggle.checked ? 'on' : 'off'); } catch { } toast(autoUpdateToggle.checked ? '自动更新已开启' : '自动更新已关闭'); });
+  }
   $('languageSelect').addEventListener('change', () => {
     const lang = setLanguage($('languageSelect').value);
     localStorage.setItem('nalo-code-lang', lang);

@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nalo 随时 Agent</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif; }
+  #stage { position: relative; width: 100%; height: 100%; }
+  #pet { position: absolute; left: 50%; bottom: 4px; width: 210px; height: 210px; transform: translateX(-50%); cursor: grab; user-select: none; z-index: 4; animation: pet-float 3.4s ease-in-out infinite; filter: drop-shadow(0 10px 18px #0005); }
+  #pet:active { cursor: grabbing; }
+  @keyframes pet-float { 0%,100% { transform: translateX(-50%) translateY(0) } 50% { transform: translateX(-50%) translateY(-7px) } }
+
+  #panel { position: absolute; z-index: 10; left: 8px; right: 8px; bottom: 188px; border: 1px solid #333741; border-radius: 15px; background: #15171c; color: #f4f1e8; box-shadow: 0 18px 44px #0008; overflow: hidden; display: flex; flex-direction: column; }
+  #panel[hidden] { display: none; }
+  .panel-head { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 8px 12px; border-bottom: 1px solid #2b2e36; cursor: grab; flex: 0 0 auto; }
+  .panel-head:active { cursor: grabbing; }
+  .panel-head img.orb { width: 23px; height: 23px; border-radius: 7px; object-fit: cover; }
+  .panel-head .title { min-width: 0; }
+  .panel-head strong { display: block; font-size: 12px; font-weight: 650; letter-spacing: .02em; }
+  .panel-head small { display: block; color: #8b909b; font-size: 10px; margin-top: 1px; }
+  #statusDot { width: 7px; height: 7px; border-radius: 50%; background: #57d39b; box-shadow: 0 0 8px #57d39b99; margin-left: auto; flex: 0 0 auto; }
+  #statusDot.busy { background: #f4b942; box-shadow: 0 0 8px #f4b94299; animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .35 } }
+  #closePanel { width: 24px; height: 24px; border: 0; border-radius: 6px; background: transparent; color: #8b909b; font-size: 18px; line-height: 1; cursor: pointer; }
+  #closePanel:hover { background: #2b2e36; color: #fff; }
+
+  #log { flex: 1 1 auto; min-height: 120px; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; scrollbar-width: thin; }
+  .msg { font-size: 12px; line-height: 1.6; border-radius: 9px; padding: 7px 9px; max-width: 92%; white-space: pre-wrap; word-break: break-word; }
+  .msg.user { align-self: flex-end; background: #f4f0e7; color: #17181c; }
+  .msg.agent { align-self: flex-start; background: #20232a; color: #ece8df; }
+  .msg.note { align-self: flex-start; color: #8b909b; background: transparent; padding: 0 2px; font-size: 10.5px; }
+  .msg.error { align-self: flex-start; color: #ffb0b0; background: #3a2024; }
+  .approval { align-self: stretch; border: 1px solid #5a4a25; background: #2b2518; border-radius: 10px; padding: 9px; font-size: 11px; line-height: 1.55; color: #f3e5bd; }
+  .approval strong { display: block; margin-bottom: 4px; font-size: 11.5px; }
+  .approval .row { display: flex; gap: 6px; margin-top: 8px; }
+  .approval button { flex: 1; border: 0; border-radius: 6px; padding: 6px 4px; font-size: 11px; cursor: pointer; }
+  .approval .allow { background: #57d39b; color: #0f1a15; }
+  .approval .deny { background: #3b3e46; color: #f0ece3; }
+
+  .composer { flex: 0 0 auto; border-top: 1px solid #2b2e36; padding: 8px 10px 7px; display: flex; gap: 6px; align-items: flex-end; }
+  #prompt { flex: 1; min-height: 34px; max-height: 92px; resize: none; border: 1px solid #333741; border-radius: 9px; background: #1b1e24; color: #f4f1e8; padding: 8px 9px; font: inherit; font-size: 12px; outline: none; }
+  #prompt:focus { border-color: #65736d; }
+  #send { width: 34px; height: 34px; border: 0; border-radius: 9px; background: #57d39b; color: #102018; font-size: 18px; cursor: pointer; }
+  #send:disabled { opacity: .4; cursor: default; }
+  #stop { width: 34px; height: 34px; border: 1px solid #4a3030; border-radius: 9px; background: #2b1c1f; color: #ffb1b1; font-size: 11px; cursor: pointer; display: none; }
+  .panel-foot { flex: 0 0 auto; padding: 0 12px 8px; color: #71808a; font-size: 9.5px; display: flex; justify-content: space-between; }
+
+  .login-tip { position: absolute; left: 12px; right: 12px; bottom: 200px; z-index: 12; padding: 12px; border-radius: 11px; background: #15171c; color: #f4f1e8; border: 1px solid #333741; text-align: center; font-size: 11px; box-shadow: 0 10px 30px #0008; }
+  .login-tip button { margin-top: 8px; border: 0; border-radius: 7px; background: #57d39b; color: #102018; padding: 6px 12px; font: inherit; cursor: pointer; }
+
+  body.chat-only { background: #15171c; }
+  body.chat-only #pet { display: none; }
+  body.chat-only #panel { position: absolute; top: 8px; bottom: 8px; left: 8px; right: 8px; height: auto; }
+  body.chat-only #log { min-height: 0; flex: 1 1 0; }
+  body.chat-only .login-tip { bottom: 20px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="panel" hidden>
+    <div class="panel-head">
+      <img class="orb" src="/icon-192.png" alt="Nalo Code">
+      <div class="title"><strong>Nalo 随时 Agent</strong><small id="statusText">待机</small></div>
+      <span id="statusDot"></span>
+      <button id="closePanel" title="关闭">×</button>
+    </div>
+    <div id="log"></div>
+    <div class="composer">
+      <textarea id="prompt" rows="1" placeholder="让 Nalo 做什么…"></textarea>
+      <button id="stop" title="停止">停</button>
+      <button id="send" title="发送">↑</button>
+    </div>
+    <div class="panel-foot"><span>Enter 发送 · Shift+Enter 换行</span><span id="sessionHint">新会话</span></div>
+  </div>
+
+  <div id="login-tip" class="login-tip" hidden>
+    请先登录 Nalo Code，桌面宠物才能使用 Agent。
+    <br><button id="openMain">打开主界面登录</button>
+  </div>
+
+  <img id="pet" src="/pet.png" alt="Nalo 桌面宠物" draggable="false">
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const log = $('log');
+  const prompt = $('prompt');
+  const sendBtn = $('send');
+  const stopBtn = $('stop');
+  const panel = $('panel');
+  const pet = $('pet');
+  const chatOnly = new URLSearchParams(location.search).get('chat') === '1';
+  const state = { sessionId: null, busy: false, abort: null, pendingApproval: null, authenticated: false, context: null };
+
+  const post = (message) => { try { window.chrome?.webview?.postMessage(message); } catch { } };
+  const setPetState = (value) => post({ type: 'pet-state', state: value });
+  const setStatus = (text, busy = false) => {
+    $('statusText').textContent = text;
+    $('statusDot').classList.toggle('busy', busy);
+  };
+  const scroll = () => { log.scrollTop = log.scrollHeight; };
+  const add = (role, text) => {
+    const node = document.createElement('div');
+    node.className = `msg ${role}`;
+    node.textContent = text;
+    log.appendChild(node);
+    scroll();
+    return node;
+  };
+
+  async function api(path, options = {}) {
+    const response = await fetch(path, { ...options, headers: { 'content-type': 'application/json', ...(options.headers || {}) } });
+    const text = await response.text();
+    let data = {};
+    try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+    if (!response.ok) { const error = new Error(data.error || `HTTP ${response.status}`); error.data = data; throw error; }
+    return data;
+  }
+
+  async function checkAuth() {
+    try {
+      const app = await api('/api/app');
+      state.authenticated = Boolean(app.authenticated);
+      $('login-tip').hidden = state.authenticated || !chatOnly;
+      return state.authenticated;
+    } catch {
+      state.authenticated = false;
+      $('login-tip').hidden = !chatOnly;
+      return false;
+    }
+  }
+
+  async function ensureSession() {
+    if (state.sessionId) return state.sessionId;
+    const data = await api('/api/sessions', { method: 'POST', body: '{}' });
+    state.sessionId = data.session.id;
+    $('sessionHint').textContent = '桌面会话';
+    api('/api/session/rename', { method: 'POST', body: JSON.stringify({ id: state.sessionId, title: '桌面随时 Agent' }) }).catch(() => {});
+    return state.sessionId;
+  }
+
+  function openPanel() {
+    panel.hidden = false;
+    checkAuth().then((ok) => {
+      $('login-tip').hidden = ok;
+      if (ok) setTimeout(() => prompt.focus(), 120);
+    });
+  }
+  function closePanel() {
+    if (chatOnly) { post({ type: 'close-chat' }); return; }
+    panel.hidden = true;
+  }
+  function togglePanel() { if (panel.hidden) openPanel(); else closePanel(); }
+
+  function addApproval(payload) {
+    state.pendingApproval = payload;
+    setPetState('waiting');
+    const box = document.createElement('div'); box.className = 'approval';
+    const title = document.createElement('strong'); title.textContent = `需要确认：${payload.tool || '操作'}`;
+    const detail = document.createElement('div'); detail.textContent = payload.summary || payload.detail || payload.path || payload.command || '允许这次操作吗？';
+    const row = document.createElement('div'); row.className = 'row';
+    const allow = document.createElement('button'); allow.className = 'allow'; allow.textContent = '允许';
+    const deny = document.createElement('button'); deny.className = 'deny'; deny.textContent = '拒绝';
+    allow.onclick = async () => { await api('/api/answer', { method: 'POST', body: JSON.stringify({ id: payload.id, answer: '允许' }) }).catch(() => {}); box.remove(); state.pendingApproval = null; setStatus('执行中', true); };
+    deny.onclick = async () => { await api('/api/answer', { method: 'POST', body: JSON.stringify({ id: payload.id, answer: '拒绝' }) }).catch(() => {}); box.remove(); state.pendingApproval = null; setStatus('已拒绝'); setPetState('idle'); };
+    row.append(allow, deny); box.append(title, detail, row); log.appendChild(box); scroll();
+  }
+
+  async function send() {
+    const text = prompt.value.trim();
+    if (!text || state.busy) return;
+    if (!(await checkAuth())) { $('login-tip').hidden = false; return; }
+    const contextPrefix = state.context?.title ? `[当前窗口：${state.context.title}] ` : '';
+    prompt.value = '';
+    prompt.style.height = '34px';
+    add('user', text);
+    sendBtn.disabled = true;
+    state.busy = true;
+    setPetState('working');
+    setStatus('准备中', true);
+    stopBtn.style.display = 'block';
+    let agent = null;
+    let finalText = '';
+    try {
+      await ensureSession();
+      state.abort = new AbortController();
+      const response = await fetch('/api/chat', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sessionId: state.sessionId, message: contextPrefix + text }),
+        signal: state.abort.signal
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${response.status}`);
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let index;
+        while ((index = buffer.indexOf('\n\n')) !== -1) {
+          const chunk = buffer.slice(0, index); buffer = buffer.slice(index + 2);
+          const eventMatch = chunk.match(/^event:\s*(.+)$/m);
+          const dataMatch = chunk.match(/^data:\s*(.+)$/m);
+          if (!eventMatch) continue;
+          let payload = {};
+          if (dataMatch) { try { payload = JSON.parse(dataMatch[1]); } catch { } }
+          const event = eventMatch[1].trim();
+          if (event === 'thinking') setStatus('思考中', true);
+          else if (event === 'content') {
+            if (!agent) agent = add('agent', '');
+            finalText += payload.text || '';
+            agent.textContent = finalText;
+            scroll();
+          } else if (event === 'tool-start') {
+            setStatus('执行中', true);
+            add('note', `执行：${payload.name || '工具'}${payload.detail ? ` · ${payload.detail}` : ''}`);
+          } else if (event === 'approval') { addApproval(payload); setStatus('等待确认'); }
+          else if (event === 'ask') { setPetState('waiting'); add('note', payload.question || 'Nalo 需要你补充信息'); }
+          else if (event === 'done') {
+            if (!finalText && payload.text) { if (!agent) agent = add('agent', ''); finalText = payload.text; agent.textContent = finalText; }
+          } else if (event === 'error') add('error', payload.message || '执行失败');
+        }
+      }
+      if (!finalText) add('agent', '已完成。');
+      setStatus('待机'); setPetState('idle');
+    } catch (error) {
+      if (error?.name !== 'AbortError') { add('error', error.message); }
+      else { add('note', '已停止当前任务'); }
+      setStatus('待机'); setPetState('idle');
+    } finally {
+      state.busy = false; state.abort = null; sendBtn.disabled = false; stopBtn.style.display = 'none'; prompt.focus();
+    }
+  }
+
+  async function stop() {
+    if (!state.busy) return;
+    try { state.abort?.abort(); } catch { }
+    try { await api('/api/stop', { method: 'POST', body: JSON.stringify({ sessionId: state.sessionId }) }); } catch { }
+    add('note', '已请求停止');
+    setStatus('已停止'); setPetState('idle');
+  }
+
+  pet.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    const start = { x: event.clientX, y: event.clientY };
+    let moved = false;
+    const move = (e) => {
+      if (moved) return;
+      if (Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) > 6) {
+        moved = true; post({ type: 'pet-drag' });
+        window.removeEventListener('pointermove', move);
+      }
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      if (!moved) togglePanel();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up, { once: true });
+  });
+
+  $('closePanel').onclick = closePanel;
+  $('openMain').onclick = () => post({ type: 'open-main' });
+  sendBtn.onclick = send;
+  stopBtn.onclick = stop;
+  prompt.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); send(); }
+  });
+  prompt.addEventListener('input', () => { prompt.style.height = 'auto'; prompt.style.height = `${Math.min(92, prompt.scrollHeight)}px`; });
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closePanel(); });
+
+  window.chrome?.webview?.addEventListener('message', (event) => {
+    if (event.data?.type === 'context') state.context = event.data;
+  });
+  post({ type: 'get-context' });
+  if (chatOnly) { document.body.classList.add('chat-only'); panel.hidden = false; setTimeout(() => prompt.focus(), 180); }
+  checkAuth();
+})();
+</script>
+</body>
+</html>
