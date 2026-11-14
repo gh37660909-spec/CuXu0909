@@ -1,0 +1,77 @@
+name: Smoke test published macOS packages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  launch:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            package: Nalo%20Code-2.2.1-arm64-mac.zip
+            sha256: 0ff98c6302593145d2ae67b04bd6d6fde77eb5532388c31a667f85267980f7e4
+          - runner: macos-15-intel
+            package: Nalo%20Code-2.2.1-mac.zip
+            sha256: 0618f687ee63502c1ff62e96cddbbc6bb82ced953b7340d54ca85c486b134879
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 12
+    steps:
+      - name: Download and verify published package
+        env:
+          PACKAGE: ${{ matrix.package }}
+          EXPECTED_SHA256: ${{ matrix.sha256 }}
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 "https://nalo.work/download/$PACKAGE" -o "$RUNNER_TEMP/nalo.zip"
+          echo "$EXPECTED_SHA256  $RUNNER_TEMP/nalo.zip" | shasum -a 256 -c -
+          mkdir -p "$RUNNER_TEMP/nalo-app"
+          ditto -x -k "$RUNNER_TEMP/nalo.zip" "$RUNNER_TEMP/nalo-app"
+          test -x "$RUNNER_TEMP/nalo-app/Nalo Code.app/Contents/MacOS/Nalo Code"
+
+      - name: Launch app and check local server
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/nalo-app/Nalo Code.app/Contents/MacOS/Nalo Code"
+          LOG="$RUNNER_TEMP/nalo-launch.log"
+          "$APP" > "$LOG" 2>&1 &
+          PID=$!
+          trap 'kill "$PID" 2>/dev/null || true' EXIT
+          PORT=''
+          for i in $(seq 1 90); do
+            if ! kill -0 "$PID" 2>/dev/null; then
+              cat "$LOG"
+              echo 'App process exited before the local server started' >&2
+              exit 1
+            fi
+            PORT=$(sed -nE 's/.*Nalo Code listening on http:\/\/127\.0\.0\.1:([0-9]+).*/\1/p' "$LOG" | head -n 1)
+            if [ -n "$PORT" ]; then break; fi
+            sleep 1
+          done
+          if [ -z "$PORT" ]; then
+            cat "$LOG"
+            echo 'Local server did not start within 90 seconds' >&2
+            exit 1
+          fi
+          curl -fsS "http://127.0.0.1:$PORT/api/app" -o "$RUNNER_TEMP/app.json"
+          grep -q '"version":"2.2.1"' "$RUNNER_TEMP/app.json"
+          curl -fsS "http://127.0.0.1:$PORT/" -o "$RUNNER_TEMP/index.html"
+          grep -q 'Nalo Code' "$RUNNER_TEMP/index.html"
+          kill -0 "$PID"
+          screencapture -x "$RUNNER_TEMP/nalo-screen.png" || true
+          echo "Launched Nalo Code on $(uname -m), local server port $PORT"
+
+      - name: Save diagnostic log and screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-smoke-${{ matrix.runner }}
+          path: |
+            ${{ runner.temp }}/nalo-launch.log
+            ${{ runner.temp }}/app.json
+            ${{ runner.temp }}/nalo-screen.png
+          if-no-files-found: ignore
