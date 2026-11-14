@@ -38,7 +38,7 @@ jobs:
           set -euo pipefail
           APP="$RUNNER_TEMP/nalo-app/Nalo Code.app/Contents/MacOS/Nalo Code"
           LOG="$RUNNER_TEMP/nalo-launch.log"
-          "$APP" > "$LOG" 2>&1 &
+          "$APP" --remote-debugging-port=9222 > "$LOG" 2>&1 &
           PID=$!
           trap 'kill "$PID" 2>/dev/null || true' EXIT
           PORT=''
@@ -62,6 +62,62 @@ jobs:
           curl -fsS "http://127.0.0.1:$PORT/" -o "$RUNNER_TEMP/index.html"
           grep -q 'Nalo Code' "$RUNNER_TEMP/index.html"
           kill -0 "$PID"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs/promises';
+
+          const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+          let target;
+          for (let i = 0; i < 60; i++) {
+            try {
+              const pages = await (await fetch('http://127.0.0.1:9222/json/list')).json();
+              target = pages.find((page) => page.type === 'page' && page.url.startsWith('http://127.0.0.1:'));
+              if (target) break;
+            } catch {}
+            await pause(500);
+          }
+          if (!target) throw new Error('Electron page did not appear in DevTools');
+          const ws = new WebSocket(target.webSocketDebuggerUrl);
+          await new Promise((resolve, reject) => {
+            ws.addEventListener('open', resolve, { once: true });
+            ws.addEventListener('error', reject, { once: true });
+          });
+          let id = 0;
+          const pending = new Map();
+          ws.addEventListener('message', ({ data }) => {
+            const message = JSON.parse(data);
+            const task = pending.get(message.id);
+            if (!task) return;
+            pending.delete(message.id);
+            message.error ? task.reject(new Error(message.error.message)) : task.resolve(message.result);
+          });
+          const call = (method, params = {}) => new Promise((resolve, reject) => {
+            const key = ++id;
+            pending.set(key, { resolve, reject });
+            ws.send(JSON.stringify({ id: key, method, params }));
+          });
+          const evaluate = async (expression) => {
+            const result = await call('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
+            if (result.exceptionDetails) throw new Error(result.exceptionDetails.text);
+            return result.result.value;
+          };
+          let ui;
+          for (let i = 0; i < 40; i++) {
+            ui = await evaluate('({ready:document.readyState,title:document.title,text:document.body?.innerText?.slice(0,1000)||"",login:!!document.querySelector("#login")?.open,rail:!!document.querySelector("#railSettings")})');
+            if (ui.rail && ui.login && ui.text.length > 100) break;
+            await pause(500);
+          }
+          console.log('Rendered UI:', JSON.stringify(ui));
+          if (!ui.rail || !ui.login || ui.text.length < 100) throw new Error('Login interface did not render');
+          await pause(1500);
+          const loginShot = await call('Page.captureScreenshot', { format: 'png' });
+          await fs.writeFile(`${process.env.RUNNER_TEMP}/nalo-login.png`, Buffer.from(loginShot.data, 'base64'));
+          const settings = await evaluate('(() => { document.querySelector("#login").close(); document.querySelector("#railSettings").click(); return {open:!!document.querySelector("#settings")?.open,text:document.querySelector("#settings")?.innerText?.slice(0,300)||""}; })()');
+          console.log('Settings UI:', JSON.stringify(settings));
+          if (!settings.open || settings.text.length < 50) throw new Error('Settings interface did not open');
+          const settingsShot = await call('Page.captureScreenshot', { format: 'png' });
+          await fs.writeFile(`${process.env.RUNNER_TEMP}/nalo-settings.png`, Buffer.from(settingsShot.data, 'base64'));
+          ws.close();
+          NODE
           screencapture -x "$RUNNER_TEMP/nalo-screen.png" || true
           echo "Launched Nalo Code on $(uname -m), local server port $PORT"
 
@@ -74,4 +130,6 @@ jobs:
             ${{ runner.temp }}/nalo-launch.log
             ${{ runner.temp }}/app.json
             ${{ runner.temp }}/nalo-screen.png
+            ${{ runner.temp }}/nalo-login.png
+            ${{ runner.temp }}/nalo-settings.png
           if-no-files-found: ignore
