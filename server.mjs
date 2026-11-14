@@ -35,7 +35,7 @@ const PROFILES_FILE = path.join(DATA, 'profiles.json');
 const USAGE_FILE = path.join(DATA, 'usage.json');
 const USAGES_FILE = path.join(DATA, 'usages.json');
 const FEEDBACK_FILE = path.join(DATA, 'feedback.jsonl');
-const APP_VERSION = '2.1.9';
+const APP_VERSION = '2.2.1';
 const LOCAL_MODEL_URL = process.env.NALO_LOCAL_URL || 'http://127.0.0.1:8090/v1';
 const LOCAL_MODEL_NAME = process.env.NALO_LOCAL_MODEL || 'local';
 const LOCAL_MODEL_LABEL = process.env.NALO_LOCAL_LABEL || 'Nalo start1.8pro';
@@ -104,7 +104,9 @@ const DEFAULT_CONFIG = {
   protocol: 'openai',
   thinkingLevel: 'medium',
   contextMessages: 200,
-  compressAfterTokens: 100000000
+  compressAfterTokens: 100000000,
+  desktopPetEnabled: false,
+  agentControlEnabled: false
 };
 
 const BASE_TOOLS = [
@@ -518,6 +520,23 @@ const DEV_TOOLS = [
   }
 ];
 
+const DESKTOP_TOOLS = [
+  { type: 'function', function: { name: 'desktop_windows', description: '列出当前打开的桌面窗口（进程名、PID、标题），用于定位要操作的应用。', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'desktop_activate', description: '按窗口标题或进程名激活并置前一个桌面窗口。', parameters: { type: 'object', properties: { title: { type: 'string', description: '窗口标题的一部分' }, process: { type: 'string', description: '进程名，例如 notepad' } } } } },
+  { type: 'function', function: { name: 'desktop_click', description: '在屏幕绝对坐标点击鼠标。适用于原生桌面应用，不限于浏览器。', parameters: { type: 'object', properties: { x: { type: 'integer' }, y: { type: 'integer' }, button: { type: 'string', enum: ['left', 'right', 'double'] } }, required: ['x', 'y'] } } },
+  { type: 'function', function: { name: 'desktop_type', description: '把一段文字输入到当前获得焦点的窗口（支持中文，通过剪贴板粘贴）。', parameters: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] } } },
+  { type: 'function', function: { name: 'desktop_key', description: '向当前窗口发送按键组合，例如 ENTER、CTRL+S、ALT+F4、TAB。', parameters: { type: 'object', properties: { keys: { type: 'string' } }, required: ['keys'] } } },
+  { type: 'function', function: { name: 'desktop_scroll', description: '在指定坐标滚动鼠标滚轮。', parameters: { type: 'object', properties: { x: { type: 'integer' }, y: { type: 'integer' }, delta: { type: 'integer', description: '正数向上，负数向下' } }, required: ['x', 'y', 'delta'] } } },
+  { type: 'function', function: { name: 'desktop_screenshot', description: '截取当前整个桌面，保存到工作区并返回图片路径。', parameters: { type: 'object', properties: {} } } }
+];
+
+const KNOWLEDGE_TOOLS = [
+  { type: 'function', function: { name: 'knowledge_save', description: '把一条知识或项目资料写入本地知识库，之后可检索。', parameters: { type: 'object', properties: { title: { type: 'string' }, text: { type: 'string' }, tags: { type: 'string', description: '可选，逗号分隔' } }, required: ['title', 'text'] } } },
+  { type: 'function', function: { name: 'knowledge_search', description: '检索本地知识库，返回最相关的资料片段。', parameters: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'integer' } }, required: ['query'] } } },
+  { type: 'function', function: { name: 'knowledge_list', description: '列出本地知识库中的资料。', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'knowledge_delete', description: '按 id 删除一条知识库资料。', parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } } }
+];
+
 const BROWSER_TOOLS = [
   {
     type: 'function',
@@ -722,17 +741,22 @@ const EXTRA_TOOLS = [
   }
 ];
 
-const SENSITIVE_TOOLS = new Set(['edit_scanned_pdf', 'office_edit', 'transcribe_audio', 'browser_upload', 'service_start', 'service_stop', 'run_code', 'list_runtimes', 'list_files', 'read_file', 'write_file', 'read_image', 'read_document', 'edit_pdf', 'convert_image', 'generate_image', 'edit_document', 'list_drives', 'open_url', 'look_screen', 'run_command', 'search_files', 'glob_files', 'edit_file', 'browser_open', 'browser_read', 'browser_click', 'browser_type', 'browser_screenshot']);
+const SENSITIVE_TOOLS = new Set(['desktop_activate', 'desktop_click', 'desktop_type', 'desktop_key', 'desktop_scroll', 'desktop_screenshot', 'edit_scanned_pdf', 'office_edit', 'transcribe_audio', 'browser_upload', 'service_start', 'service_stop', 'run_code', 'list_runtimes', 'list_files', 'read_file', 'write_file', 'read_image', 'read_document', 'edit_pdf', 'convert_image', 'generate_image', 'edit_document', 'list_drives', 'open_url', 'look_screen', 'run_command', 'search_files', 'glob_files', 'edit_file', 'browser_open', 'browser_read', 'browser_click', 'browser_type', 'browser_screenshot']);
 
 function allToolDefinitions() {
-  const tools = [...BASE_TOOLS, ...MEDIA_TOOLS, ...SYSTEM_TOOLS, ...BROWSER_TOOLS, ...DEV_TOOLS, ...CODE_TOOLS, ...SERVICE_TOOLS, ...EXTRA_TOOLS, ...(config.plan === 'free' ? [] : mcpToolDefinitions())];
+  const tools = [...BASE_TOOLS, ...DESKTOP_TOOLS, ...KNOWLEDGE_TOOLS, ...MEDIA_TOOLS, ...SYSTEM_TOOLS, ...BROWSER_TOOLS, ...DEV_TOOLS, ...CODE_TOOLS, ...SERVICE_TOOLS, ...EXTRA_TOOLS, ...(config.plan === 'free' ? [] : mcpToolDefinitions())];
   if (config.searchEnabled) tools.push(WEB_SEARCH_TOOL, FETCH_URL_TOOL);
   return tools;
 }
 
 function buildTools() {
   const disabled = new Set(Array.isArray(config.disabledTools) ? config.disabledTools : []);
-  return allToolDefinitions().filter((tool) => !disabled.has(tool.function?.name));
+  return allToolDefinitions().filter((tool) => {
+    const name = tool.function?.name || '';
+    if (disabled.has(name)) return false;
+    if (!config.agentControlEnabled && name.startsWith('desktop_')) return false;
+    return true;
+  });
 }
 
 const TOOL_GROUPS = [
@@ -750,6 +774,9 @@ const TOOL_GROUPS = [
   { id: 'code', label: '代码编译', description: '编译运行 15 种语言', names: ['run_code', 'list_runtimes'] },
   { id: 'dev', label: '开发与命令', description: '执行命令、搜索代码、修改文件', names: ['run_command', 'search_files', 'glob_files', 'edit_file', 'set_plan'] },
   { id: 'memory', label: '长期记忆', description: '记住偏好与约定', names: ['remember', 'recall'] },
+  { id: 'agentcontrol', label: 'Agent Control', description: '鼠标、键盘和桌面窗口控制，高危操作需逐次确认', names: ['desktop_windows', 'desktop_activate', 'desktop_click', 'desktop_type', 'desktop_key', 'desktop_scroll', 'desktop_screenshot'] },
+  { id: 'knowledge', label: '知识库', description: '本地持久知识库的写入、检索与删除', names: ['knowledge_save', 'knowledge_search', 'knowledge_list', 'knowledge_delete'] },
+
   { id: 'ask', label: '交互', description: '需要你确认时提问', names: ['ask_user'] },
   { id: 'automation', label: '自动化', description: '创建定时/间隔任务', names: ['create_automation'] }
 ];
@@ -2005,6 +2032,12 @@ function currentUsername(req) {
   return username;
 }
 
+function isPetSession(session) {
+  if (!session) return false;
+  if (session.petAgent) return true;
+  return /^(?:(?:Nalo|桌面)\s*)?随时\s*Agent$/i.test(String(session.title || '').trim());
+}
+
 function canAccessSession(req, session) {
   if (!session) return false;
   const username = currentUsername(req);
@@ -2042,6 +2075,7 @@ function publicProfile() {
     username: account?.username || '',
     email,
     role: account?.role || 'user',
+    createdAt: Number(account?.createdAt) || 0,
     plan: account?.plan || config.plan || 'free',
     role: account?.role || 'user',
     maintenance: maintenanceState,
@@ -2066,25 +2100,23 @@ function ageFromBirth(value) {
 }
 
 let usageTimer = null;
-function recordUsage(promptTokens, completionTokens) {
+function recordUsage(ownerName, promptTokens, completionTokens) {
   if (!promptTokens && !completionTokens) return;
-  usage.promptTokens += promptTokens || 0;
-  usage.completionTokens += completionTokens || 0;
-  usage.updatedAt = Date.now();
+  const owner = String(ownerName || account?.username || 'local');
+  const target = userUsages[owner] || { promptTokens: 0, completionTokens: 0, updatedAt: 0, days: {} };
+  if (!target.days || typeof target.days !== 'object') target.days = {};
+  target.promptTokens += promptTokens || 0;
+  target.completionTokens += completionTokens || 0;
+  target.updatedAt = Date.now();
   const day = new Date().toISOString().slice(0, 10);
-  const bucket = usage.days[day] || { prompt: 0, completion: 0 };
+  const bucket = target.days[day] || { prompt: 0, completion: 0 };
   bucket.prompt += promptTokens || 0;
   bucket.completion += completionTokens || 0;
-  usage.days[day] = bucket;
+  target.days[day] = bucket;
+  userUsages[owner] = target;
+  if (account?.username === owner) usage = target;
   clearTimeout(usageTimer);
-  const owner = account?.username || '';
-  const isAdmin = account?.role === 'admin';
-  const snapshot = JSON.parse(JSON.stringify(usage));
-  usageTimer = setTimeout(() => {
-    if (owner) userUsages[owner] = snapshot;
-    saveUserUsages();
-    if (isAdmin) fs.writeFile(USAGE_FILE, JSON.stringify(snapshot, null, 2), 'utf8').catch(() => {});
-  }, 200);
+  usageTimer = setTimeout(() => { saveUserUsages(); }, 200);
 }
 
 function applyUserUsage(username) {
@@ -2236,6 +2268,8 @@ function publicConfig() {
     permission: config.permission || 'confirm',
     agentDispatch: true,
     localModelEnabled: Boolean(config.localModelEnabled),
+    desktopPetEnabled: Boolean(config.desktopPetEnabled),
+    agentControlEnabled: Boolean(config.agentControlEnabled),
     disabledTools: Array.isArray(config.disabledTools) ? config.disabledTools : [],
     vision: { baseUrl: config.vision?.baseUrl || '', model: config.vision?.model || '', configured: Boolean(config.vision?.baseUrl && config.vision?.model) },
     transcribe: { baseUrl: config.transcribe?.baseUrl || '', model: config.transcribe?.model || '', configured: Boolean(config.transcribe?.baseUrl && config.transcribe?.model) },
@@ -2307,6 +2341,61 @@ function sse(res) {
 }
 
 /* -------------------------------------------------------------- provider */
+
+const balanceCache = new Map();
+
+async function queryProviderBalance(provider) {
+  const baseUrl = String(provider?.baseUrl || '').trim();
+  const apiKey = String(provider?.apiKey || '').trim();
+  if (!apiKey) return { supported: false, note: '未配置 API Key' };
+  let host = '';
+  try { host = new URL(baseUrl).hostname.toLowerCase(); } catch { return { supported: false, note: 'Base URL 无效' }; }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    if (host === 'api.deepseek.com') {
+      const response = await fetch('https://api.deepseek.com/user/balance', {
+        headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' },
+        signal: controller.signal
+      });
+      if (!response.ok) return { supported: false, note: '余额接口不可用' };
+      const data = await response.json();
+      const info = Array.isArray(data.balance_infos) ? data.balance_infos[0] : null;
+      const value = Number(info?.total_balance);
+      if (!Number.isFinite(value)) return { supported: false, note: '无法识别余额' };
+      return { supported: true, balance: value, currency: info?.currency || 'CNY', note: '' };
+    }
+    if (host === 'api.moonshot.ai' || host === 'api.moonshot.cn') {
+      const origin = host === 'api.moonshot.ai' ? 'https://api.moonshot.ai' : 'https://api.moonshot.cn';
+      const response = await fetch(origin + '/v1/users/me/balance', {
+        headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' },
+        signal: controller.signal
+      });
+      if (!response.ok) return { supported: false, note: 'Kimi 余额接口不可用，请确认 Key 与平台区域一致' };
+      const data = await response.json();
+      const value = Number(data?.data?.available_balance);
+      if (!Number.isFinite(value)) return { supported: false, note: '无法识别 Kimi 余额' };
+      return { supported: true, balance: value, currency: 'USD', note: '' };
+    }
+    if (host === 'openrouter.ai') {
+      const response = await fetch('https://openrouter.ai/api/v1/credits', {
+        headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' },
+        signal: controller.signal
+      });
+      if (!response.ok) return { supported: false, note: '余额接口不可用' };
+      const data = await response.json();
+      const credits = Number(data?.data?.total_credits);
+      const usage = Number(data?.data?.total_usage);
+      if (!Number.isFinite(credits) || !Number.isFinite(usage)) return { supported: false, note: '无法识别余额' };
+      return { supported: true, balance: credits - usage, currency: 'USD', note: '' };
+    }
+    return { supported: false, note: '该厂商未开放普通 API Key 余额查询' };
+  } catch (error) {
+    return { supported: false, note: error?.name === 'AbortError' ? '查询超时' : '查询失败' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 async function listProviderModels({ baseUrl, apiKey }) {
   const controller = new AbortController();
@@ -2576,7 +2665,33 @@ function runProcess(command, args, { timeout = 90000, cwd } = {}) {
   });
 }
 
-async function runTool(name, args, workspace = config.workspace) {
+async function runDesktopPowerShell(script, timeout = 30000) {
+  return await runProcess('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], { timeout });
+}
+
+function psQuote(value) {
+  return String(value || '').replace(/'/g, "''");
+}
+
+function knowledgeFile(owner) {
+  const key = crypto.createHash('sha256').update(String(owner || 'local')).digest('hex').slice(0, 24);
+  return path.join(DATA, 'knowledge', key + '.json');
+}
+
+async function readKnowledge(owner) {
+  try {
+    const data = JSON.parse(await fs.readFile(knowledgeFile(owner), 'utf8'));
+    return Array.isArray(data.items) ? data.items : [];
+  } catch { return []; }
+}
+
+async function saveKnowledge(owner, items) {
+  const file = knowledgeFile(owner);
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(file, JSON.stringify({ owner: String(owner || 'local'), items }, null, 2), 'utf8');
+}
+
+async function runTool(name, args, workspace = config.workspace, owner = '') {
   switch (name) {
     case 'list_files': {
       const target = resolveTarget(args?.path || '.');
@@ -3292,6 +3407,90 @@ async function runTool(name, args, workspace = config.workspace) {
       await fs.copyFile(target, dest);
       return { text: `已放到桌面：${dest}`, file: dest };
     }
+    case 'desktop_windows': {
+      const script = "Get-Process | Where-Object { $_.MainWindowTitle } | Select-Object ProcessName,Id,MainWindowTitle | Format-Table -AutoSize | Out-String -Width 220";
+      return await runDesktopPowerShell(script, 15000);
+    }
+    case 'desktop_activate': {
+      const title = psQuote(args?.title || '');
+      const process = psQuote(args?.process || '');
+      const script = `Add-Type @"\nusing System;\nusing System.Runtime.InteropServices;\npublic class NaloWin { [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h,int n); }\n"@\n$p = Get-Process | Where-Object { ${title ? `$_.MainWindowTitle -like '*${title}*'` : `$_.ProcessName -eq '${process}'`} } | Select-Object -First 1\nif (-not $p) { throw '窗口不存在' }\n[NaloWin]::ShowWindow($p.MainWindowHandle,9) | Out-Null\n[NaloWin]::SetForegroundWindow($p.MainWindowHandle) | Out-Null\n"已激活 $($p.ProcessName) · $($p.MainWindowTitle)"`;
+      return await runDesktopPowerShell(script, 15000);
+    }
+    case 'desktop_click': {
+      const x = Math.round(Number(args?.x) || 0);
+      const y = Math.round(Number(args?.y) || 0);
+      const mode = String(args?.button || 'left');
+      const script = `Add-Type @"\nusing System;\nusing System.Runtime.InteropServices;\npublic class NaloMouse { [DllImport("user32.dll")] public static extern bool SetCursorPos(int X,int Y); [DllImport("user32.dll")] public static extern void mouse_event(uint f,uint dx,uint dy,uint d,UIntPtr e); }\n"@\n[NaloMouse]::SetCursorPos(${x},${y}) | Out-Null\nStart-Sleep -Milliseconds 80\n${mode === 'right' ? '[NaloMouse]::mouse_event(0x0008,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 60; [NaloMouse]::mouse_event(0x0010,0,0,0,[UIntPtr]::Zero)' : mode === 'double' ? '[NaloMouse]::mouse_event(0x0002,0,0,0,[UIntPtr]::Zero); [NaloMouse]::mouse_event(0x0004,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 80; [NaloMouse]::mouse_event(0x0002,0,0,0,[UIntPtr]::Zero); [NaloMouse]::mouse_event(0x0004,0,0,0,[UIntPtr]::Zero)' : '[NaloMouse]::mouse_event(0x0002,0,0,0,[UIntPtr]::Zero); [NaloMouse]::mouse_event(0x0004,0,0,0,[UIntPtr]::Zero)'}\n"点击 (${x}, ${y})"`;
+      return await runDesktopPowerShell(script, 15000);
+    }
+    case 'desktop_type': {
+      const text = String(args?.text || '');
+      if (!text) throw new Error('缺少要输入的文字');
+      const base64 = Buffer.from(text, 'utf8').toString('base64');
+      const script = `Add-Type -AssemblyName System.Windows.Forms\n$text = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${base64}'))\nSet-Clipboard -Value $text\nStart-Sleep -Milliseconds 80\n[System.Windows.Forms.SendKeys]::SendWait('^v')\n"已输入 ${text.length} 个字符"`;
+      return await runDesktopPowerShell(script, 20000);
+    }
+    case 'desktop_key': {
+      const keys = psQuote(args?.keys || '');
+      const script = `Add-Type -AssemblyName System.Windows.Forms\n[System.Windows.Forms.SendKeys]::SendWait('${keys}')\n"已发送按键 ${keys}"`;
+      return await runDesktopPowerShell(script, 15000);
+    }
+    case 'desktop_scroll': {
+      const x = Math.round(Number(args?.x) || 0);
+      const y = Math.round(Number(args?.y) || 0);
+      const delta = Math.round(Number(args?.delta) || 0);
+      const script = `Add-Type @"\nusing System;\nusing System.Runtime.InteropServices;\npublic class NaloScroll { [DllImport("user32.dll")] public static extern bool SetCursorPos(int X,int Y); [DllImport("user32.dll")] public static extern void mouse_event(uint f,uint dx,uint dy,uint d,UIntPtr e); }\n"@\n[NaloScroll]::SetCursorPos(${x},${y}) | Out-Null\n[NaloScroll]::mouse_event(0x0800,0,0,${delta},[UIntPtr]::Zero)\n"已滚动"`;
+      return await runDesktopPowerShell(script, 15000);
+    }
+    case 'desktop_screenshot': {
+      const dir = path.join(workspace, '.nalo', 'screens');
+      await fs.mkdir(dir, { recursive: true });
+      const file = path.join(dir, `desktop-${Date.now()}.png`);
+      const script = `Add-Type -AssemblyName System.Drawing\nAdd-Type -AssemblyName System.Windows.Forms\n$b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds\n$bmp=New-Object Drawing.Bitmap $b.Width,$b.Height\n$g=[Drawing.Graphics]::FromImage($bmp)\n$g.CopyFromScreen($b.Location,[Drawing.Point]::Empty,$b.Size)\n$bmp.Save('${psQuote(file)}',[Drawing.Imaging.ImageFormat]::Png)\n$g.Dispose(); $bmp.Dispose()\n"已保存"`;
+      await runDesktopPowerShell(script, 20000);
+      const relative = path.relative(path.resolve(workspace), file).replace(/\\/g, '/');
+      return { text: `桌面截图：${relative}`, file: relative };
+    }
+    case 'knowledge_save': {
+      const title = String(args?.title || '').trim().slice(0, 120);
+      const text = String(args?.text || '').trim().slice(0, 50000);
+      if (!title || !text) throw new Error('标题和内容不能为空');
+      const items = await readKnowledge(owner);
+      const item = { id: crypto.randomUUID(), title, text, tags: String(args?.tags || '').slice(0, 200), createdAt: Date.now() };
+      items.push(item); await saveKnowledge(owner, items);
+      return `已写入知识库：${title}（ID ${item.id}）`;
+    }
+    case 'knowledge_search': {
+      const query = String(args?.query || '').trim().toLowerCase();
+      const limit = Math.max(1, Math.min(20, Number(args?.limit) || 5));
+      const items = await readKnowledge(owner);
+      const words = query.split(/\\s+/).filter(Boolean);
+      const ranked = items.map((item) => {
+        const hay = `${item.title} ${item.tags || ''} ${item.text}`.toLowerCase();
+        let score = 0;
+        for (const word of words) {
+          let index = 0;
+          while ((index = hay.indexOf(word, index)) !== -1) { score += 1; index += word.length; }
+        }
+        return { item, score };
+      }).filter((entry) => !words.length || entry.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
+      if (!ranked.length) return '知识库里没有找到相关内容。';
+      return ranked.map(({ item, score }) => `【${item.title}】 id=${item.id} 命中=${score}\\n${item.text.slice(0, 800)}`).join('\\n\\n');
+    }
+    case 'knowledge_list': {
+      const items = await readKnowledge(owner);
+      if (!items.length) return '知识库为空。';
+      return items.slice(-100).map((item) => `- ${item.title} (id=${item.id}, ${new Date(item.createdAt).toLocaleString()})`).join('\\n');
+    }
+    case 'knowledge_delete': {
+      const id = String(args?.id || '');
+      const items = await readKnowledge(owner);
+      const next = items.filter((item) => item.id !== id);
+      if (next.length === items.length) throw new Error('没有找到这条知识');
+      await saveKnowledge(owner, next);
+      return '已删除知识库条目。';
+    }
     default:
       throw new Error(`未知工具：${name}`);
   }
@@ -3451,6 +3650,7 @@ async function compressSessionContext(session) {
 
 async function runAgent({ session, runId, emit, signal, autoApprove = false, automationMode = false }) {
   const started = Date.now();
+  const usageOwner = session.owner || account?.username || '';
   const workspace = await ensureSessionWorkspace(session);
   await ensureMcpClients().catch(() => {});
   const runState = { approved: false, denied: new Set(), autoApprove };
@@ -3512,7 +3712,7 @@ async function runAgent({ session, runId, emit, signal, autoApprove = false, aut
           const completionTokens = chunk.usage.completion_tokens ?? chunk.usage.output_tokens ?? 0;
           usage.promptTokens = promptTokens || usage.promptTokens;
           usage.completionTokens = completionTokens || usage.completionTokens;
-          recordUsage(promptTokens, completionTokens);
+          recordUsage(usageOwner, promptTokens, completionTokens);
         }
 
         const reasoningDelta = delta.reasoning_content || delta.reasoning;
@@ -3666,7 +3866,7 @@ async function runAgent({ session, runId, emit, signal, autoApprove = false, aut
           let outcome;
           if (call.name === 'web_search') outcome = await webSearch(args.query, args.count);
           else if (call.name === 'fetch_url') outcome = await fetchUrlText(args.url);
-          else outcome = await runTool(call.name, args, workspace);
+          else outcome = await runTool(call.name, args, workspace, session?.owner || runState?.owner || '');
 
           if (outcome && typeof outcome === 'object') {
             emit('tool-end', { id: call.id, name: call.name, ok: true, preview: outcome.text, file: outcome.file, elapsedMs: elapsed() });
@@ -3707,7 +3907,7 @@ async function runAgent({ session, runId, emit, signal, autoApprove = false, aut
     const completionEstimate = Math.max(1, Math.round((answerText.length + reasoningChars) / 3.2));
     usage.promptTokens = promptEstimate;
     usage.completionTokens = completionEstimate;
-    recordUsage(promptEstimate, completionEstimate);
+    recordUsage(usageOwner, promptEstimate, completionEstimate);
   }
 
   session.tokenUsage = (session.tokenUsage || 0) + usage.promptTokens + usage.completionTokens;
@@ -3925,6 +4125,14 @@ async function downloadUpdate() {
           await handle.close();
         }
         if (total && received < total) throw new Error('下载中断，请重试续传');
+        const expectedSha = String(config.sha256 || '').trim().toLowerCase();
+        if (expectedSha) {
+          const actualSha = crypto.createHash('sha256').update(await fs.readFile(file)).digest('hex');
+          if (actualSha !== expectedSha) {
+            await fs.unlink(file).catch(() => {});
+            throw new Error('安装包校验失败，已删除，请重试');
+          }
+        }
         Object.assign(updateState, { status: 'ready', mode: 'full', percent: 100, total: received, received, file });
         return;
       } catch (error) {
@@ -4196,7 +4404,7 @@ footer{margin-top:40px;font-size:11px;color:#9a9ba2}</style></head>
         : { ...publicConfig(), baseUrl: '', model: '', models: [], providers: [], activeProviderId: '', hasKey: false, keyHint: '', configured: false };
       return json(res, 200, {
         config: safeConfig,
-        sessions: activeUser && !isBanned(account) ? sessions.filter((session) => session.owner === activeUser).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).map((session) => ({
+        sessions: activeUser && !isBanned(account) ? sessions.filter((session) => session.owner === activeUser && !isPetSession(session)).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).map((session) => ({
           id: session.id,
           title: session.title,
           updatedAt: session.updatedAt,
@@ -4274,6 +4482,66 @@ footer{margin-top:40px;font-size:11px;color:#9a9ba2}</style></head>
       return json(res, 200, { ok: true });
     }
 
+    if (req.method === 'GET' && pathname === '/api/knowledge') {
+      const owner = currentUsername(req);
+      if (!owner) return json(res, 401, { error: '请先登录' });
+      const items = await readKnowledge(owner);
+      return json(res, 200, { items: items.slice(-100).reverse().map((item) => ({ id: item.id, title: item.title, text: item.text, tags: item.tags || '', createdAt: item.createdAt })) });
+    }
+
+    if (req.method === 'POST' && pathname === '/api/knowledge') {
+      const owner = currentUsername(req);
+      if (!owner) return json(res, 401, { error: '请先登录' });
+      const body = await readBody(req);
+      const title = String(body.title || '').trim().slice(0, 120);
+      const text = String(body.text || '').trim().slice(0, 50000);
+      if (!title || !text) return json(res, 400, { error: '标题和内容不能为空' });
+      const items = await readKnowledge(owner);
+      const item = { id: crypto.randomUUID(), title, text, tags: String(body.tags || '').slice(0, 200), createdAt: Date.now() };
+      items.push(item); await saveKnowledge(owner, items);
+      return json(res, 200, { item });
+    }
+
+    if (req.method === 'DELETE' && pathname === '/api/knowledge') {
+      const owner = currentUsername(req);
+      if (!owner) return json(res, 401, { error: '请先登录' });
+      const id = url.searchParams.get('id');
+      const items = await readKnowledge(owner);
+      const next = items.filter((item) => item.id !== id);
+      if (next.length === items.length) return json(res, 404, { error: '没有找到这条知识' });
+      await saveKnowledge(owner, next);
+      return json(res, 200, { ok: true });
+    }
+
+    if (req.method === 'GET' && pathname === '/api/balances') {
+      const owner = currentUsername(req);
+      if (!owner) return json(res, 401, { error: '请先登录' });
+      const refresh = url.searchParams.get('refresh') === '1';
+      const providers = (Array.isArray(config.providers) ? config.providers : []).slice(0, 5);
+      if (!providers.length) {
+        if (config.model) providers.push({ id: 'current', name: config.model, model: config.model, baseUrl: config.baseUrl, apiKey: config.apiKey });
+      }
+      const balances = await Promise.all(providers.map(async (provider, index) => {
+        const cacheKey = provider.id || provider.model || String(index);
+        const cached = balanceCache.get(cacheKey);
+        if (!refresh && cached && Date.now() - cached.updatedAt < 120000) return cached;
+        const result = await queryProviderBalance(provider);
+        const item = {
+          id: provider.id || `current-${index}`,
+          model: provider.model || provider.name || `模型 ${index + 1}`,
+          name: provider.name || '',
+          supported: Boolean(result.supported),
+          balance: result.supported ? result.balance : null,
+          currency: result.currency || '',
+          note: result.supported ? '' : (result.note || '无法估算'),
+          updatedAt: Date.now()
+        };
+        balanceCache.set(cacheKey, item);
+        return item;
+      }));
+      return json(res, 200, { balances });
+    }
+
     if (req.method === 'POST' && pathname === '/api/config') {
       const body = await readBody(req);
       const next = { ...config };
@@ -4282,6 +4550,7 @@ footer{margin-top:40px;font-size:11px;color:#9a9ba2}</style></head>
       if (body.protocol !== undefined && ['openai','anthropic','gemini'].includes(body.protocol)) next.protocol = body.protocol;
       if (body.thinkingLevel !== undefined && ['low','medium','high','unlimited'].includes(body.thinkingLevel)) next.thinkingLevel = body.thinkingLevel;
       if (body.plan !== undefined && PLANS[body.plan]) next.plan = body.plan;
+      if (body.desktopPetEnabled !== undefined) next.desktopPetEnabled = Boolean(body.desktopPetEnabled);
       if (body.removeModel) {
         const target = String(body.removeModel);
         next.models = (Array.isArray(next.models) ? next.models : []).filter((name) => name !== target);
@@ -4346,6 +4615,7 @@ footer{margin-top:40px;font-size:11px;color:#9a9ba2}</style></head>
         const limit = Number(body.thinkingLimit);
         next.thinkingLimit = Number.isFinite(limit) && limit > 0 ? Math.min(200000, Math.round(limit)) : 0;
       }
+      if (body.agentControlEnabled !== undefined) next.agentControlEnabled = Boolean(body.agentControlEnabled);
       if (body.permission !== undefined) {
         next.permission = ['forbidden', 'confirm', 'open'].includes(body.permission) ? body.permission : 'confirm';
       }
@@ -4602,15 +4872,50 @@ footer{margin-top:40px;font-size:11px;color:#9a9ba2}</style></head>
     if (req.method === 'GET' && pathname === '/api/sessions') {
       const username = currentUsername(req);
       if (!username) return json(res, 401, { error: '请先登录' });
-      return json(res, 200, { sessions: sessions.filter((item) => item.owner === username) });
+      return json(res, 200, { sessions: sessions.filter((item) => item.owner === username && !isPetSession(item)) });
     }
 
     if (req.method === 'POST' && pathname === '/api/sessions') {
-      const session = { id: crypto.randomUUID(), owner: account?.username || '', title: '新对话', createdAt: Date.now(), updatedAt: Date.now(), messages: [] };
+      const body = await readBody(req);
+      const petAgent = Boolean(body.petAgent);
+      const session = {
+        id: crypto.randomUUID(), owner: account?.username || '',
+        title: String(body.title || (petAgent ? '随时Agent' : '新对话')).slice(0, 80),
+        petAgent, createdAt: Date.now(), updatedAt: Date.now(), messages: []
+      };
       await ensureSessionWorkspace(session);
       sessions.unshift(session);
       saveSessionsSoon();
       return json(res, 200, { session });
+    }
+
+    if (req.method === 'GET' && pathname === '/api/pet-sessions') {
+      const owner = currentUsername(req);
+      if (!owner) return json(res, 401, { error: '请先登录' });
+      const list = sessions.filter((session) => session.owner === owner && isPetSession(session))
+        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+        .map((session) => ({
+          id: session.id, title: session.title, updatedAt: session.updatedAt,
+          messageCount: (session.messages || []).length,
+          preview: (session.messages || []).filter((m) => m.role === 'assistant' && m.content).slice(-1)[0]?.content?.slice(0, 120) || ''
+        }));
+      return json(res, 200, { sessions: list });
+    }
+
+    if (req.method === 'DELETE' && pathname === '/api/pet-sessions') {
+      const owner = currentUsername(req);
+      if (!owner) return json(res, 401, { error: '请先登录' });
+      const id = url.searchParams.get('id');
+      const all = url.searchParams.get('all') === '1';
+      const remove = sessions.filter((session) => session.owner === owner && isPetSession(session) && (all || session.id === id));
+      for (const session of remove) {
+        if (activeRuns.has(session.id)) { const runId = activeRuns.get(session.id); try { runs.get(runId)?.controller.abort(); } catch { } activeRuns.delete(session.id); }
+        if (!deletedState.ids.includes(session.id)) deletedState.ids.push(session.id);
+      }
+      sessions = sessions.filter((session) => !(session.owner === owner && isPetSession(session) && (all || session.id === id)));
+      saveDeletedNow();
+      saveSessionsSoon();
+      return json(res, 200, { ok: true, removed: remove.length });
     }
 
     if (req.method === 'GET' && pathname === '/api/session') {
@@ -4703,7 +5008,6 @@ footer{margin-top:40px;font-size:11px;color:#9a9ba2}</style></head>
         : { id: crypto.randomUUID(), owner: currentUsername(req) || '', title: '新对话', messages: [], createdAt: Date.now() };
       if (!session) return json(res, 404, { error: '对话不存在' });
       if (!canAccessSession(req, session)) return json(res, 403, { error: '无权访问这个对话' });
-      if (!sessions.includes(session)) sessions.unshift(session);
       const localReady = config.localModelEnabled && await probeLocalModel();
       if (config.localModelEnabled && !localReady) {
         return json(res, 409, { error: '本地模型未就绪：llama-server 没有响应，请稍后再试，或在设置里关闭本地内置模型' });
@@ -4713,6 +5017,8 @@ footer{margin-top:40px;font-size:11px;color:#9a9ba2}</style></head>
       }
       const text = String(body.message || '').trim();
       if (!text) return json(res, 400, { error: '消息为空' });
+
+      if (!sessions.includes(session)) sessions.unshift(session);
 
       if (activeRuns.has(session.id)) {
         const list = queuedChats.get(session.id) || [];
@@ -5029,7 +5335,7 @@ footer{margin-top:40px;font-size:11px;color:#9a9ba2}</style></head>
           available: await probeLocalModel()
         },
         profile: username ? publicProfile() : null,
-        usage: username ? usage : null
+        usage: username ? (userUsages[username] || { promptTokens: 0, completionTokens: 0, updatedAt: 0, days: {} }) : null
       });
     }
 
@@ -5301,8 +5607,9 @@ footer{margin-top:40px;font-size:11px;color:#9a9ba2}</style></head>
     }
 
     if (req.method === 'GET' && pathname === '/api/usage') {
-      if (!currentUsername(req)) return json(res, 401, { error: '请先登录' });
-      return json(res, 200, { usage });
+      const username = currentUsername(req);
+      if (!username) return json(res, 401, { error: '请先登录' });
+      return json(res, 200, { usage: userUsages[username] || { promptTokens: 0, completionTokens: 0, updatedAt: 0, days: {} } });
     }
 
     if (req.method === 'POST' && pathname === '/api/upload') {
